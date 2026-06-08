@@ -98,7 +98,7 @@ This project implements a **multi-modal music genre classification system** usin
 ### 1. Clone & navigate
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/QuocAnh-Nguyen/IT3190-Capstone.git
 cd IT3190-Capstone
 ```
 
@@ -132,13 +132,9 @@ The key packages are:
 The dataset is available from the official MusicOSet repository:
 
 ```bash
-# Option 1: Download from Kaggle
-# Visit: https://www.kaggle.com/datasets/yamqwe/musicoset
+# Option 1: Download from MusicOSet github
+# Visit: https://marianaossilva.github.io/DSW2019/#tables
 # Download the archive and extract it
-
-# Option 2: Download from the academic source
-# Visit: https://marianaossilva.github.io/DSW2019/index.html
-# Navigate to the "Downloads" section
 ```
 
 #### Step 3b: Create the data directory structure
