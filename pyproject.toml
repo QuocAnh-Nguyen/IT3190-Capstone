@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "multi-modal-music-genre-classification"
+version = "0.1.0"
+description = "End-to-end ML pipeline for predicting music genre from acoustic features and lyrics"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]

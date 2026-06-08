@@ -1,0 +1,34 @@
+# Core data science
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+
+# Database
+sqlalchemy>=2.0
+mysql-connector-python>=8.0
+
+# Machine learning
+scikit-learn>=1.3
+xgboost>=2.0
+imbalanced-learn>=0.12
+
+# NLP
+nltk>=3.8
+textblob>=0.17
+
+# Graph
+networkx>=3.0
+
+# Visualization
+matplotlib>=3.7
+seaborn>=0.13
+
+# Web app & explainability
+streamlit>=1.28
+shap>=0.42
+
+# Serialization
+joblib>=1.3
+
+# Utilities
+tqdm>=4.65
