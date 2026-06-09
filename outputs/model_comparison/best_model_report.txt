@@ -1,0 +1,66 @@
+BEST MODEL: LightGBM
+============================================================
+Model: LightGBM
+Acc: 0.6348897535667963
+MP: 0.5611450818678406
+MR: 0.5197109856605683
+MF1: 0.5317075886766477
+WF1: 0.6241145916840635
+WP: 0.6252844328212742
+WR: 0.6348897535667963
+Time: 29.944639682769775
+
+CV RESULTS:
+  Logistic Regression: 0.3427 +/- 0.0101
+  Random Forest: 0.5149 +/- 0.0090
+  XGBoost: 0.5429 +/- 0.0138
+  LightGBM: 0.5520 +/- 0.0210
+  CatBoost: 0.4641 +/- 0.0104
+
+TUNED PARAMETERS:
+  XGBoost: {'n_estimators': 250, 'max_depth': 12, 'learning_rate': 0.1205712628744377, 'subsample': 0.8394633936788146, 'colsample_bytree': 0.6624074561769746, 'min_child_weight': 2, 'reg_alpha': 2.9152036385288193e-08, 'reg_lambda': 0.08499808989182997}
+  LightGBM: {'n_estimators': 383, 'max_depth': 3, 'learning_rate': 0.2708160864249968, 'subsample': 0.9329770563201687, 'colsample_bytree': 0.6849356442713105, 'num_leaves': 58, 'min_child_samples': 13, 'reg_alpha': 2.716051144654844e-06, 'reg_lambda': 0.00015777981883364995}
+  CatBoost: {'iterations': 250, 'depth': 10, 'learning_rate': 0.1205712628744377, 'l2_leaf_reg': 0.6251373574521749}
+
+FULL CLASSIFICATION REPORT:
+                      precision    recall  f1-score   support
+
+        acoustic pop      0.222     0.167     0.190        12
+     adult standards      0.557     0.664     0.606       146
+          album rock      0.582     0.479     0.526        96
+ alternative hip hop      0.462     0.545     0.500        11
+   alternative metal      0.556     0.763     0.643        59
+    alternative rock      0.333     0.208     0.256        24
+         atl hip hop      0.682     0.536     0.600        56
+      australian pop      0.200     0.118     0.148        17
+               blues      0.533     0.667     0.593        12
+            boy band      0.542     0.406     0.464        32
+  brill building pop      0.460     0.430     0.444        93
+       bubblegum pop      0.342     0.342     0.342        38
+    canadian hip hop      1.000     1.000     1.000        17
+        canadian pop      0.857     0.571     0.686        21
+         chicago rap      0.750     0.400     0.522        15
+        chicago soul      0.556     0.500     0.526        20
+        classic soul      0.541     0.460     0.497        87
+      classic uk pop      0.143     0.077     0.100        13
+   conscious hip hop      0.846     0.647     0.733        17
+contemporary country      0.744     0.882     0.807       228
+             country      0.267     0.235     0.250        17
+      country gospel      0.348     0.500     0.410        16
+           dance pop      0.806     0.872     0.838       266
+          dance rock      0.286     0.235     0.258        17
+     detroit hip hop      1.000     0.833     0.909        12
+     dirty south rap      0.556     0.455     0.500        11
+               disco      0.400     0.267     0.320        30
+  east coast hip hop      0.700     0.636     0.667        22
+           freestyle      0.429     0.643     0.514        14
+                funk      0.417     0.294     0.345        17
+             hip hop      0.815     0.846     0.830        26
+             hip pop      0.467     0.583     0.519        12
+           hollywood      1.000     0.850     0.919        20
+          neo mellow      0.417     0.278     0.333        18
+                 pop      0.828     0.800     0.814        30
+
+            accuracy                          0.635      1542
+           macro avg      0.561     0.520     0.532      1542
+        weighted avg      0.625     0.635     0.624      1542
