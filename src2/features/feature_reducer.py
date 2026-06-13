@@ -33,15 +33,15 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Optional
-
+from sklearn.preprocessing import StandardScaler
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestClassifier
-
-from src2.config import FEATURES_DIR, PCA_VARIANCE_THRESHOLD, RANDOM_SEED
+from typing import Any
+from src2.config import FEATURES_DIR, PCA_N_COMPONENTS, PCA_VARIANCE_THRESHOLD, RANDOM_SEED
 from src2.utils.io_utils import load_joblib, save_joblib
-
+from sklearn.pipeline import Pipeline
 # ---------------------------------------------------------------------------
 # Module-level logger
 # ---------------------------------------------------------------------------
@@ -65,8 +65,12 @@ _RF_N_JOBS: int = -1
 def fit_pca(
     X: np.ndarray,
     variance_threshold: float = PCA_VARIANCE_THRESHOLD,
+    n_components: int = PCA_N_COMPONENTS,
 ) -> tuple[PCA, np.ndarray]:
     """Fit a PCA transformer that retains ``variance_threshold`` of variance.
+
+    If ``n_components > 0``, uses a fixed number of components instead of
+    the variance-threshold heuristic (Step 4D of improve_plan).
 
     Parameters
     ----------
@@ -75,59 +79,71 @@ def fit_pca(
         be float-typed; integer arrays are cast automatically.
     variance_threshold:
         Fraction of cumulative explained variance to retain, in the range
-        ``(0.0, 1.0]``.  Defaults to ``PCA_VARIANCE_THRESHOLD`` from config.
+        ``(0.0, 1.0]``.  Only used if ``n_components <= 0``.
+    n_components:
+        Fixed number of PCA components.  If > 0, overrides the variance
+        threshold.  Defaults to ``PCA_N_COMPONENTS`` from config.
 
     Returns
     -------
     tuple[PCA, np.ndarray]
         A 2-tuple of:
 
-        * ``pca`` – the fitted ``sklearn.decomposition.PCA`` instance, which
-          can be used to ``transform`` unseen data.
+        * ``pca`` – the fitted sklearn Pipeline (StandardScaler + PCA).
         * ``X_reduced`` – the projected matrix of shape
           ``(n_samples, n_components)``.
 
     Raises
     ------
     ValueError
-        If ``X`` is not a 2-D array or ``variance_threshold`` is outside
-        ``(0, 1]``.
+        If ``X`` is not a 2-D array.
     """
     if X.ndim != 2:
-        raise ValueError(
-            f"fit_pca expects a 2-D array, got shape {X.shape}."
-        )
-    if not (0.0 < variance_threshold <= 1.0):
-        raise ValueError(
-            f"variance_threshold must be in (0, 1], got {variance_threshold}."
-        )
+        raise ValueError(f"fit_pca expects a 2-D array, got shape {X.shape}.")
 
     n_samples, n_input_features = X.shape
-    logger.info(
-        "Fitting PCA on matrix of shape (%d, %d) "
-        "targeting %.1f%% explained variance ...",
-        n_samples,
-        n_input_features,
-        variance_threshold * 100,
-    )
+
+    if n_components > 0:
+        # Fixed components mode
+        component_kwargs = {"n_components": min(n_components, n_input_features, n_samples)}
+        logger.info(
+            "Fitting Scaler + PCA on matrix of shape (%d, %d) with fixed n_components=%d ...",
+            n_samples, n_input_features, component_kwargs["n_components"],
+        )
+    else:
+        if not (0.0 < variance_threshold <= 1.0):
+            raise ValueError(
+                f"variance_threshold must be in (0, 1], got {variance_threshold}."
+            )
+        component_kwargs = {"n_components": variance_threshold}
+        logger.info(
+            "Fitting Scaler + PCA on matrix of shape (%d, %d) targeting %.1f%% variance ...",
+            n_samples, n_input_features, variance_threshold * 100,
+        )
 
     try:
-        pca = PCA(n_components=variance_threshold, random_state=RANDOM_SEED)
-        X_reduced: np.ndarray = pca.fit_transform(X.astype(float))
+        # Wrap the scaler and PCA into a single pipeline
+        pca_pipeline = Pipeline([
+            ('scaler', StandardScaler()),
+            ('pca', PCA(random_state=RANDOM_SEED, **component_kwargs))
+        ])
+
+        X_reduced: np.ndarray = pca_pipeline.fit_transform(X.astype(float))
+        
     except Exception as exc:
-        logger.error("PCA fitting failed: %s", exc, exc_info=True)
+        logger.error("PCA pipeline fitting failed: %s", exc, exc_info=True)
         raise
 
-    n_components = pca.n_components_
-    explained = pca.explained_variance_ratio_.sum()
+    # Extract the actual PCA step to log its components
+    pca_step = pca_pipeline.named_steps['pca']
+    n_components = pca_step.n_components_
+    explained = pca_step.explained_variance_ratio_.sum()
+    
     logger.info(
-        "PCA selected %d components out of %d input features "
-        "(cumulative explained variance: %.4f).",
-        n_components,
-        n_input_features,
-        explained,
+        "PCA selected %d components out of %d input features (explained variance: %.4f).",
+        n_components, n_input_features, explained,
     )
-    return pca, X_reduced
+    return pca_pipeline, X_reduced
 
 
 # ---------------------------------------------------------------------------
@@ -444,15 +460,17 @@ def fuse_features(
 # 5. Save / Load Reducer
 # ---------------------------------------------------------------------------
 
-def save_reducer(pca: PCA, path: Path) -> None:
-    """Persist a fitted PCA transformer to disk via joblib.
+from typing import Any # Add this to your imports at the top if it isn't there
+
+def save_reducer(pca: Any, path: Path) -> None:
+    """Persist a fitted PCA transformer (or Pipeline) to disk via joblib.
 
     The parent directory is created automatically if it does not exist.
 
     Parameters
     ----------
     pca:
-        A fitted ``sklearn.decomposition.PCA`` instance.
+        A fitted `sklearn.decomposition.PCA` or `sklearn.pipeline.Pipeline` instance.
     path:
         Destination file path
         (e.g. ``FEATURES_DIR / "pca_reducer.joblib"``).
@@ -460,10 +478,17 @@ def save_reducer(pca: PCA, path: Path) -> None:
     try:
         path = Path(path)
         save_joblib(pca, path)
+        
+        # Safely extract n_components whether it's a Pipeline or a raw PCA object
+        if hasattr(pca, "named_steps") and "pca" in pca.named_steps:
+            n_comp = pca.named_steps["pca"].n_components_
+        else:
+            n_comp = getattr(pca, "n_components_", 0)
+            
         logger.info(
             "PCA reducer saved to '%s' (n_components=%d).",
             path,
-            pca.n_components_,
+            n_comp,
         )
     except Exception as exc:
         logger.error(

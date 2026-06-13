@@ -1,37 +1,29 @@
-## REVISED PROJECT PROPOSAL
-
 **Project Title:** Multi-modal Music Genre Classification
-**Objective:** Build a comprehensive, end-to-end machine learning pipeline to predict a track's genre by exploiting complex relational data structures, combining numerical acoustic features with the semantic analysis of lyrics.
+**Objective:** Build a comprehensive, end-to-end machine learning pipeline to predict a track's genres (Multi-Label Classification) by combining raw audio data processing with the semantic analysis of lyrics.
 
 ### Phase 1: Data Engineering & Preprocessing
-
 * **Foundation Dataset:** Utilize **MusicOSet**, an open-source academic dataset containing multi-dimensional information on artists, tracks, and albums, structured as a relational database.
-* **Data Integration:** Set up a local SQL database and engineer complex `JOIN` queries to merge the `AcousticFeatures`, `Artists`, `Genres`, and `Lyrics` tables into a unified Feature Matrix.
-* **Advanced Imputation:** Instead of simply dropping missing values caused by incomplete cross-platform mapping (e.g., Spotify to Genius), implement a secondary machine learning model (Regression Imputation) to predict and fill in missing acoustic features.
-* **Class Imbalance Handling:** Address the severe dataset skew toward "Pop" and "Rock" genres by applying advanced data sampling techniques, such as SMOTE (Synthetic Minority Over-sampling Technique) or targeted undersampling, to ensure an unbiased model.
+* **Data Integration:** Set up a local SQL database and engineer queries to merge the `Artists`, `Genres`, and `Lyrics` tables. We will bypass pre-computed acoustic features and map the database records directly to our locally stored raw audio files.
+* **Missing Data Handling:** Implement a robust strategy for tracks with missing data (e.g., broken audio URLs, missing lyrics, or insufficient metadata). Depending on data availability, decide whether to drop records missing multiple modalities or impute/mask missing inputs so the model can still predict using a single available modality.
+* **Class Imbalance (Multi-Label):** Address the dataset skew where certain genres (e.g., "Pop", "Rock") dominate. Utilize multi-label specific sampling techniques (like MLSMOTE) or adjust class weights in the loss function to ensure the model penalizes majority-class bias.
 
 ### Phase 2: Advanced Feature Engineering
+We will build a dual-track feature extraction pipeline, comparing traditional ML feature extraction against modern Deep Learning embeddings:
 
-Rather than relying solely on raw data, the team will actively transform and synthesize new dimensions to provide the model with deeper insights:
-
-* **Graph/Network Features:** Utilize Graph Theory (via `NetworkX`) to map collaborative tracks. By calculating network metrics like Degree Centrality, the model will capture the "homophily" (the tendency of similar artists to collaborate) within specific genres.
-* **Advanced NLP on Lyrics:** Transform the textual `Lyrics` data into mathematical metrics by measuring Lexical Richness (unique word ratio) and performing Sentiment Analysis to capture the emotional tone of the track.
-* **Interaction Features:** Apply `PolynomialFeatures` to cross-multiply acoustic metrics (e.g., `energy` $\times$ `danceability`). This helps linear models capture complex, non-linear boundaries between genres like EDM and Acoustic Pop.
-* **Unsupervised Learning (Clustering):** Run a $K$-Means clustering algorithm on the acoustic data to group tracks into objective "Acoustic Clusters," completely independent of human-assigned genres. Use the resulting Cluster IDs as a brand new categorical feature.
-* **Feature Selection:** Prevent the "Curse of Dimensionality" by utilizing algorithms like Random Forest Feature Importance or Principal Component Analysis (PCA) to retain only the most predictive variables.
+* **Audio Processing (Two-Pronged Approach):**
+  * *Traditional Methods:* Use libraries like `librosa` to extract mathematical audio features (e.g., MFCCs, Mel-Spectrograms, Chroma features, Spectral Contrast).
+  * *Pre-trained Deep Learning Models:* Pass the raw audio through pre-trained audio encoders (e.g., VGGish, AST - Audio Spectrogram Transformer, or Wav2Vec) to generate dense audio embeddings.
+* **NLP on Lyrics (Two-Pronged Approach):**
+  * *Traditional Methods:* Transform lyrics using classic text processing (TF-IDF, Bag of Words) combined with Lexical Richness metrics and Sentiment Analysis scores.
+  * *Pre-trained Deep Learning Models:* Utilize transformer-based text encoders (e.g., BERT, RoBERTa) to extract rich semantic embeddings from the lyrics.
+* **Feature Selection & Dimensionality Reduction:** For the traditional feature routes, apply Principal Component Analysis (PCA) or Tree-based Feature Importance to prevent the "Curse of Dimensionality" before fusion.
 
 ### Phase 3: Model Building & Evaluation
-
-* **Hybrid Architecture:** * *Stream 1:* Process the normalized numerical matrix (Acoustic + Graph + Interaction features).
-* *Stream 2:* Process the text vectors (NLP features extracted from Lyrics).
-* *Fusion:* Concatenate both streams to output the final genre prediction.
-
-
-* **Algorithms:** Establish a robust baseline using Logistic Regression, then scale up to powerful ensemble models (Random Forest, XGBoost) or a Multi-Layer Perceptron (MLP) neural network.
-* **Evaluation Metrics:** Validate the model using $K$-Fold Cross-Validation. Track Accuracy, Precision, Recall, and F1-Score (Macro/Micro for multi-class). Generate a Confusion Matrix to analyze misclassifications between acoustically similar genres.
-
-### Phase 4: System Implementation & Deployment
-
-* **Interface:** Develop a lightweight, interactive web application using **Streamlit** or **Gradio**.
-* **Functionality:** Allow the user (instructor) to input hypothetical acoustic parameters or paste a snippet of song lyrics. The app will run the inputs through the entire preprocessing pipeline and display the predicted genre in real-time.
-* **Explainability (Bonus):** Integrate **SHAP** (SHapley Additive exPlanations) values into the dashboard to visually explain *why* the model made its specific prediction, breaking down the exact impact of each feature.
+* **Hybrid Architecture (Late Fusion):** 
+  * *Stream 1:* Process the Audio vectors (Traditional or Pre-trained Embeddings).
+  * *Stream 2:* Process the Text vectors (Traditional or Pre-trained Embeddings).
+  * *Fusion:* Concatenate both streams into a unified representation, feeding into a final classification head.
+* **Algorithms (Multi-Label Classification):** Since a single track can belong to multiple genres simultaneously, shift from multi-class to multi-label architectures. 
+  * *Traditional/Ensemble:* Multi-label Random Forest, Classifier Chains, or XGBoost configured for multi-label output.
+  * *Neural Network:* A Multi-Layer Perceptron (MLP) or custom Neural Network fusion layer utilizing a **Sigmoid** activation function on the output layer with a **Binary Cross-Entropy (BCE)** loss function.
+* **Evaluation Metrics:** Validate the model using $K$-Fold Cross-Validation adapted for multi-label datasets. Track metrics specific to multi-label performance: **Macro/Micro F1-Score**, **Hamming Loss**, **Exact Match Ratio (Subset Accuracy)**, and generate a Multi-label Confusion Matrix.

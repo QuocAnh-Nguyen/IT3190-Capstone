@@ -57,6 +57,7 @@ import pandas as pd
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from src2.config import (
+    EXCLUDED_GENRES,
     LABEL_MATRIX_NPY,
     LABEL_NAMES_TXT,
     MIN_GENRE_COUNT,
@@ -92,12 +93,13 @@ _TOP_K_DISPLAY: int = 10
 
 def _parse_genre_column(
     genres_series: pd.Series,
+    exclude_genres: list[str] | None = None,
 ) -> List[List[str]]:
     """Parse the semicolon-delimited ``genres`` column into lists.
 
     Each entry in the series is split on ``;``, stripped of surrounding
     whitespace, lower-cased, and deduplicated (preserving order of first
-    occurrence).
+    occurrence).  Genres in *exclude_genres* are removed.
 
     Parameters
     ----------
@@ -105,12 +107,18 @@ def _parse_genre_column(
         Raw ``genres`` column from the cleaned dataset.  NaN values and empty
         strings should already have been removed by the data-cleaning step, but
         any remaining nulls are treated as empty lists.
+    exclude_genres : list[str] or None
+        Genre labels to unconditionally remove from every track.
 
     Returns
     -------
     list of list of str
         One inner list per track, each containing the genre label strings.
     """
+    if exclude_genres is None:
+        exclude_genres = []
+    exclude_set = set(g.lower().strip() for g in exclude_genres)
+
     result: List[List[str]] = []
     for raw in genres_series:
         if pd.isna(raw) or str(raw).strip() == "":
@@ -119,7 +127,7 @@ def _parse_genre_column(
         seen: dict[str, None] = {}
         for token in str(raw).split(";"):
             label = token.strip().lower()
-            if label and label not in seen:
+            if label and label not in exclude_set and label not in seen:
                 seen[label] = None
         result.append(list(seen.keys()))
     return result
@@ -421,6 +429,7 @@ def load_encoder() -> MultiLabelBinarizer:
 def encode_labels(
     df: pd.DataFrame,
     min_count: int = MIN_GENRE_COUNT,
+    exclude_genres: list[str] | None = None,
 ) -> Tuple[np.ndarray, List[str], List[str], MultiLabelBinarizer, np.ndarray]:
     """Encode the ``genres`` column into a binary label matrix.
 
@@ -444,6 +453,10 @@ def encode_labels(
         Minimum number of tracks a genre must appear in to be kept.
         Defaults to :data:`src2.config.MIN_GENRE_COUNT`.
 
+    exclude_genres : list[str] or None
+        Genre labels to unconditionally exclude.  Defaults to
+        :data:`src2.config.EXCLUDED_GENRES`.
+
     Returns
     -------
     Y : np.ndarray
@@ -465,6 +478,9 @@ def encode_labels(
         If the DataFrame is missing the ``genres`` column, or if no tracks
         survive the ``min_count`` filter.
     """
+    if exclude_genres is None:
+        exclude_genres = EXCLUDED_GENRES
+
     log_section(
         logger,
         "Phase 1.4 -- Multi-Label Encoding & Class Imbalance Analysis",
@@ -494,9 +510,12 @@ def encode_labels(
     # ------------------------------------------------------------------
     # Step 1 -- Parse genre strings
     # ------------------------------------------------------------------
-    logger.info("Step 1/5  Parsing genre strings ...")
+    logger.info(
+        "Step 1/5  Parsing genre strings (excluding: %s) ...",
+        exclude_genres if exclude_genres else "(none)",
+    )
     try:
-        raw_genre_lists = _parse_genre_column(df["genres"])
+        raw_genre_lists = _parse_genre_column(df["genres"], exclude_genres=exclude_genres)
     except Exception:
         logger.exception("Error while parsing the 'genres' column.")
         raise

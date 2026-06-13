@@ -31,7 +31,7 @@ AUDIO_METADATA_CSV: Path = DATA_PROCESSED / "audio_metadata.csv"
 # ---------------------------------------------------------------------------
 # Audio
 # ---------------------------------------------------------------------------
-AUDIO_PREVIEWS_DIR: Path = PROJECT_ROOT / "audio_previews"
+AUDIO_PREVIEWS_DIR: Path = PROJECT_ROOT / "audio_previews" / "audio_previews"
 
 # ---------------------------------------------------------------------------
 # Output directories (artefacts produced during the pipeline)
@@ -63,6 +63,16 @@ RANDOM_SEED: int = 42
 MIN_GENRE_COUNT: int = 50  # genres with fewer tracks are dropped
 MAX_GENRE_COUNT: int = 1000  # cap for MLSMOTE (avoid memory blowup)
 
+# Genres to exclude entirely (Step 1 of improve_plan)
+# "stage & screen" is a use-case descriptor not an acoustic/lyrical style
+EXCLUDED_GENRES: list[str] = ["stage & screen"]
+
+# ---------------------------------------------------------------------------
+# Single-Label conversion (Step 2 of improve_plan)
+# ---------------------------------------------------------------------------
+# Strategy: "rarest" picks the least frequent genre for each track
+SINGLE_LABEL_STRATEGY: str = "rarest"  # options: "rarest", "first"
+
 # ---------------------------------------------------------------------------
 # Train / test split
 # ---------------------------------------------------------------------------
@@ -81,13 +91,41 @@ N_CHROMA: int = 12
 # ---------------------------------------------------------------------------
 # Text processing (Phase 2)
 # ---------------------------------------------------------------------------
-TFIDF_MAX_FEATURES: int = 5000
+TFIDF_MAX_FEATURES: int = 500  # reduced from 5000 (Step 4A of improve_plan)
 TFIDF_NGRAM_RANGE: tuple[int, int] = (1, 2)
+# TruncatedSVD applied after TF-IDF to further reduce text dimensions
+TEXT_SVD_COMPONENTS: int = 100  # latent text dimensions after SVD
 
 # ---------------------------------------------------------------------------
 # PCA (Phase 2)
 # ---------------------------------------------------------------------------
-PCA_VARIANCE_THRESHOLD: float = 0.95
+PCA_VARIANCE_THRESHOLD: float = 0.90  # reduced from 0.95 (Step 4D of improve_plan)
+PCA_N_COMPONENTS: int = 200  # fixed components alternative (set to 0 to use variance threshold)
+
+# ---------------------------------------------------------------------------
+# SMOTE oversampling (Step 3B of improve_plan)
+# ---------------------------------------------------------------------------
+SMOTE_ENABLED: bool = True
+SMOTE_K_NEIGHBORS: int = 5
+SMOTE_TARGET_MIN_SAMPLES: int = 500  # oversample minority classes up to this count
+SMOTE_CAP_RATIO: float = 10.0  # don't oversample beyond 10x original size
+
+# ---------------------------------------------------------------------------
+# Dead features to remove from audio (Step 4B of improve_plan)
+# ---------------------------------------------------------------------------
+DEAD_AUDIO_FEATURES: list[str] = [
+    "graph_eigenvector_centrality",
+    "graph_degree_centrality",
+    "graph_betweenness_centrality",
+    "graph_clustering_coefficient",
+    "nlp_repetition_score",
+]
+
+# ---------------------------------------------------------------------------
+# Feature engineering toggles (Step 4C of improve_plan)
+# ---------------------------------------------------------------------------
+# Set to False to exclude all pairwise interaction features
+INCLUDE_INTERACTION_FEATURES: bool = False
 
 # ---------------------------------------------------------------------------
 # Model training (Phase 3)
