@@ -182,6 +182,7 @@ def cross_validate_multiclass(
     random_state: int = RANDOM_SEED,
     label_names: list[str] | None = None,
     stratify: bool = True,
+    smote_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """K-Fold cross-validation for multi-class classifiers.
 
@@ -196,6 +197,12 @@ def cross_validate_multiclass(
     label_names : list[str] or None
     stratify : bool
         If True, use StratifiedKFold to preserve class proportions.
+    smote_config : dict or None
+        If provided, SMOTE is applied **inside each CV fold** to the
+        training portion only (no leakage).  Expected keys:
+        - ``k_neighbors`` (int)
+        - ``target_min_samples`` (int)
+        - ``cap_ratio`` (float)
 
     Returns
     -------
@@ -215,17 +222,44 @@ def cross_validate_multiclass(
     fold_summaries: list[dict[str, float]] = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X, y), start=1):
-        X_train, X_val = X[train_idx], X[val_idx]
-        y_train, y_val = y[train_idx], y[val_idx]
+        X_train_fold, X_val = X[train_idx], X[val_idx]
+        y_train_fold, y_val = y[train_idx], y[val_idx]
+
+        # Apply SMOTE *inside* the fold — only oversample training portion
+        if smote_config is not None:
+            from collections import Counter
+            from imblearn.over_sampling import SMOTE
+
+            counts = Counter(y_train_fold)
+            sampling_strategy = {}
+            for lbl, cnt in counts.items():
+                if cnt < smote_config["target_min_samples"]:
+                    target = min(
+                        smote_config["target_min_samples"],
+                        int(cnt * smote_config["cap_ratio"]),
+                    )
+                    if cnt >= smote_config["k_neighbors"] + 1 and target > cnt:
+                        sampling_strategy[lbl] = target
+
+            if sampling_strategy:
+                try:
+                    sm = SMOTE(
+                        sampling_strategy=sampling_strategy,
+                        k_neighbors=smote_config["k_neighbors"],
+                        random_state=random_state + fold_idx,
+                    )
+                    X_train_fold, y_train_fold = sm.fit_resample(X_train_fold, y_train_fold)
+                except Exception as exc:
+                    logger.warning("SMOTE failed on fold %d: %s — continuing without.", fold_idx, exc)
 
         logger.info(
             "CV fold %d/%d — training on %d, validating on %d",
-            fold_idx, n_folds, len(train_idx), len(val_idx),
+            fold_idx, n_folds, len(X_train_fold), len(X_val),
         )
 
         try:
             model = model_fn()
-            model.fit(X_train, y_train)
+            model.fit(X_train_fold, y_train_fold)
             y_pred = model.predict(X_val)
         except Exception as exc:
             logger.error("Fold %d failed: %s", fold_idx, exc)

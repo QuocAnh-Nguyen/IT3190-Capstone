@@ -123,7 +123,10 @@ def build_xgboost(
     learning_rate: float = 0.1,
     random_state: int = RANDOM_SEED,
 ) -> XGBClassifier:
-    """Build a multi-class XGBoost classifier (native multi-class support).
+    """Build a multi-class XGBoost classifier.
+
+    XGBoost requires integer-encoded labels.  The ``train_and_evaluate_multiclass``
+    function handles label encoding internally when ``use_sample_weight=True``.
 
     Parameters
     ----------
@@ -140,6 +143,7 @@ def build_xgboost(
     -------
     XGBClassifier
         Unfitted classifier with ``objective='multi:softmax'``.
+        Uses ``enable_categorical=False`` (we'll encode labels numerically).
     """
     model = XGBClassifier(
         n_estimators=n_estimators,
@@ -388,7 +392,7 @@ def train_and_evaluate_multiclass(
     logger.info("  CV folds: %d", n_folds)
 
     # ------------------------------------------------------------------
-    # Step 1 – K-Fold cross-validation
+    # Step 1 – K-Fold cross-validation (SMOTE applied INSIDE each fold)
     # ------------------------------------------------------------------
     logger.info("[%s] Starting %d-fold cross-validation ...", model_name, n_folds)
     cv_start = time.perf_counter()
@@ -400,6 +404,11 @@ def train_and_evaluate_multiclass(
             n_folds=n_folds,
             random_state=RANDOM_SEED,
             label_names=label_names,
+            smote_config={
+                "k_neighbors": 3,  # reduced from 5 for tiny classes in folds
+                "target_min_samples": 400,
+                "cap_ratio": 5.0,
+            },
         )
     except Exception as exc:
         logger.error("[%s] Cross-validation failed: %s", model_name, exc, exc_info=True)
@@ -420,13 +429,25 @@ def train_and_evaluate_multiclass(
         )
 
     # ------------------------------------------------------------------
-    # Step 2 – Compute sample weights for XGBoost (no native class_weight)
+    # Step 2 – Label encoding for XGBoost (requires integer labels)
     # ------------------------------------------------------------------
+    from sklearn.preprocessing import LabelEncoder
+
+    le = None
+    y_train_encoded = y_train
+    y_test_encoded = y_test
+    if use_sample_weight:
+        le = LabelEncoder()
+        y_train_encoded = le.fit_transform(y_train)
+        y_test_encoded = le.transform(y_test)
+        logger.info("[%s] Encoded string labels → integers (0..%d).",
+                     model_name, len(le.classes_) - 1)
+
     fit_kwargs: dict[str, Any] = {}
     if use_sample_weight:
         from sklearn.utils.class_weight import compute_sample_weight
         sample_weight = compute_sample_weight(
-            class_weight="balanced", y=y_train
+            class_weight="balanced", y=y_train_encoded,
         )
         fit_kwargs["sample_weight"] = sample_weight
         logger.info("[%s] Computed balanced sample_weight array.", model_name)
@@ -437,7 +458,7 @@ def train_and_evaluate_multiclass(
     logger.info("[%s] Fitting on full training set ...", model_name)
     fit_start = time.perf_counter()
     try:
-        model.fit(X_train, y_train, **fit_kwargs)
+        model.fit(X_train, y_train_encoded, **fit_kwargs)
     except Exception as exc:
         logger.error("[%s] Model fitting failed: %s", model_name, exc, exc_info=True)
         return {"cv_metrics": cv_metrics, "summary": {}}
@@ -449,7 +470,12 @@ def train_and_evaluate_multiclass(
     # ------------------------------------------------------------------
     logger.info("[%s] Evaluating on test set ...", model_name)
     try:
-        y_pred = model.predict(X_test)
+        y_pred_encoded = model.predict(X_test)
+        # Decode XGBoost integer predictions back to string labels
+        if le is not None:
+            y_pred = le.inverse_transform(y_pred_encoded)
+        else:
+            y_pred = y_pred_encoded
     except Exception as exc:
         logger.error("[%s] Prediction failed: %s", model_name, exc, exc_info=True)
         return {"cv_metrics": cv_metrics, "summary": {}}
@@ -552,19 +578,22 @@ def run_all_traditional_models(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # ------------------------------------------------------------------
-    # Apply SMOTE if enabled
+    # Apply SMOTE if enabled (only for final full-training fit; CV
+    # handles SMOTE internally per-fold to prevent leakage)
+    # We use a lighter SMOTE here than in CV to reduce overfitting
     # ------------------------------------------------------------------
+    X_train_smoted, y_train_smoted = X_train, y_train
     if apply_smote_flag:
-        logger.info("Applying SMOTE oversampling to training set ...")
+        logger.info("Applying SMOTE oversampling for final training fit ...")
         try:
-            X_train, y_train = apply_smote(
+            X_train_smoted, y_train_smoted = apply_smote(
                 X_train, y_train,
                 k_neighbors=smote_k_neighbors,
                 target_min_samples=smote_target_min,
                 random_state=RANDOM_SEED,
             )
         except Exception as exc:
-            logger.error("SMOTE failed: %s — continuing without oversampling.", exc)
+            logger.error("SMOTE failed: %s — continuing without.", exc)
 
     # ------------------------------------------------------------------
     # Model registry
@@ -590,8 +619,8 @@ def run_all_traditional_models(
             result = train_and_evaluate_multiclass(
                 model=model,
                 model_name=model_name,
-                X_train=X_train,
-                y_train=y_train,
+                X_train=X_train_smoted,   # SMOTEd data for final full fit
+                y_train=y_train_smoted,
                 X_test=X_test,
                 y_test=y_test,
                 label_names=label_names,

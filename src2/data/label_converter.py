@@ -197,6 +197,72 @@ def convert_to_single_label(
     return result
 
 
+def consolidate_genres(
+    df: pd.DataFrame,
+    consolidation_map: dict[str, list[str]],
+    label_col: str = "primary_genre",
+) -> pd.DataFrame:
+    """Merge tail genres into consolidated parent categories (Step 3C).
+
+    Each entry in ``consolidation_map`` defines a group of source genres that
+    are merged into a single parent name.  Only genres still present after
+    exclusion and single-label conversion are affected.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain ``primary_genre`` (or *label_col*) column with string
+        genre labels.
+    consolidation_map : dict[str, list[str]]
+        Mapping ``{merged_name: [source_genre_1, source_genre_2, ...]}``.
+    label_col : str
+        Column name of the single-label genre.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of *df* with ``primary_genre`` values remapped.  The original
+        column is copied to ``primary_genre_before_consolidation``.
+
+    Raises
+    ------
+    ValueError
+        If any source genre in consolidation_map is not found in the data.
+    """
+    df = df.copy()
+    df["primary_genre_before_consolidation"] = df[label_col]
+
+    for merged_name, source_genres in consolidation_map.items():
+        source_set = set(g.lower().strip() for g in source_genres)
+        mask = df[label_col].str.lower().str.strip().isin(source_set)
+        count = mask.sum()
+        if count > 0:
+            df.loc[mask, label_col] = merged_name
+            logger.info(
+                "Consolidated %d tracks from %s → '%s'",
+                count, source_genres, merged_name,
+            )
+        else:
+            logger.warning(
+                "Consolidation rule %s → '%s' matched 0 tracks.",
+                source_genres, merged_name,
+            )
+
+    logger.info(
+        "Genre consolidation complete: %d → %d classes.",
+        df["primary_genre_before_consolidation"].nunique(),
+        df[label_col].nunique(),
+    )
+
+    new_dist = df[label_col].value_counts()
+    logger.info("Consolidated distribution:")
+    for genre, cnt in new_dist.items():
+        logger.info("  %-30s  %6d tracks  (%5.1f%%)", genre, cnt,
+                    100.0 * cnt / len(df))
+
+    return df
+
+
 def single_label_train_test_split(
     df: pd.DataFrame,
     label_col: str = "primary_genre",

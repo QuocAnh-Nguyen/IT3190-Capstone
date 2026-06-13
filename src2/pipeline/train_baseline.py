@@ -30,7 +30,7 @@ from sklearn.model_selection import train_test_split
 
 from src2 import config
 from src2.data import data_cleaner, data_loader, label_encoder
-from src2.data.label_converter import convert_to_single_label, compute_label_counts
+from src2.data.label_converter import convert_to_single_label, compute_label_counts, consolidate_genres
 from src2.features import audio_traditional, feature_reducer, text_traditional
 from src2.models import traditional_models
 from src2.models.evaluation_multiclass import (
@@ -149,7 +149,21 @@ def phase1_4_label_encoding(
     )
 
     label_names = sorted(df_single["primary_genre"].unique())
-    logger.info("Final label set (%d classes): %s", len(label_names), label_names)
+    logger.info("After exclusion + conversion: %d classes: %s",
+                len(label_names), label_names)
+
+    # ------------------------------------------------------------------
+    # Genre consolidation (Step 3C of improve_plan)
+    # Merge tail classes: blues+jazz → "Blues & Jazz",
+    #                     latin+reggae → "Latin & Caribbean"
+    # ------------------------------------------------------------------
+    consolidation = config.GENRE_CONSOLIDATION
+    if consolidation:
+        log_section(logger, "Genre Consolidation (Step 3C)")
+        df_single = consolidate_genres(df_single, consolidation)
+        label_names = sorted(df_single["primary_genre"].unique())
+        logger.info("After consolidation: %d classes: %s",
+                    len(label_names), label_names)
 
     # Save processed dataset with primary_genre
     _CLEANED_WITH_LABEL_CSV.parent.mkdir(parents=True, exist_ok=True)

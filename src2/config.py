@@ -67,6 +67,15 @@ MAX_GENRE_COUNT: int = 1000  # cap for MLSMOTE (avoid memory blowup)
 # "stage & screen" is a use-case descriptor not an acoustic/lyrical style
 EXCLUDED_GENRES: list[str] = ["stage & screen"]
 
+# Genre consolidation mapping (Step 3C of improve_plan)
+# Key = canonical merged name, Value = list of source genres to merge
+# Merging tail genres reduces class count from 10 → 8 while preserving
+# meaningful musical relationships (blues↔jazz, latin↔reggae)
+GENRE_CONSOLIDATION: dict[str, list[str]] = {
+    "blues & jazz": ["blues", "jazz"],
+    "latin & caribbean": ["latin", "reggae"],
+}
+
 # ---------------------------------------------------------------------------
 # Single-Label conversion (Step 2 of improve_plan)
 # ---------------------------------------------------------------------------
